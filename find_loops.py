@@ -46,6 +46,12 @@ with open(netlist_file) as f:
                 for in_net in ports[:-1]:
                     net_fanout[in_net.rstrip(",")].append(out_net)
 
+print "=== Net Fanout Graph ==="
+for net, fans in net_fanout.items():
+    print net, "fans out to", fans
+print "======================="
+
+
 # ---------- BUILD FF GRAPH THROUGH COMBINATIONAL LOGIC ----------
 def get_ff_successors(ff_name, visited_nets=None):
     """Return all FFs reachable from ff_name through combinational nets."""
@@ -73,6 +79,12 @@ ff_graph = defaultdict(list)
 for ff in ff_outputs:
     succs = get_ff_successors(ff)
     ff_graph[ff].extend(succs)
+
+print "=== FF Graph ==="
+for ff, succs in ff_graph.items():
+    print ff, "->", succs
+print "================"
+
 
 # ---------- CYCLE DETECTION ----------
 def find_cycles(graph):
@@ -110,3 +122,4 @@ with open(output_file, "w") as f:
         f.write(ff + "\n")
 
 print "Found %d loops, saved %d FFs to %s" % (len(cycles), len(selected_ff), output_file)
+
