@@ -1,0 +1,2 @@
+# Partial-Scan-Loop-Breaker-for-Gate-Level-Verilog
+This repository provides a Python-based utility to assist in partial scan insertion for complex gate-level Verilog designs, particularly for ITC-99 or Nangate-style benchmarks. It helps identify flip-flops (FFs) involved in combinational feedback loops and outputs a list of candidate FFs for partial scan insertion in Synopsys Design Compiler (DC).
