@@ -20,25 +20,29 @@ with open(netlist_file) as f:
         # Parse FF
         for ff_type in ff_types:
             if line.startswith(ff_type):
-                # Example: DFFARX1_LVT reg34 ( .D(n45), .CLK(clk), .Q(reg34), .RST(reset) );
-                m = re.search(rf"{ff_type}\s+(\S+)\s*\(.*\.D\((\S+)\).*\.Q\((\S+)\)", line)
-                if m:
-                    ff_name = m.group(1)
-                    d_net = m.group(2)
-                    q_net = m.group(3)
-                    ff_inputs[ff_name] = d_net
-                    ff_outputs[ff_name] = q_net
-                    net_drivers[q_net] = ff_name
+                # Match FF name
+                m_name = re.search(rf"{ff_type}\s+(\S+)\s*\(", line)
+                if m_name:
+                    ff_name = m_name.group(1)
+                    # Match .D(...) and .Q(...) anywhere in the port list
+                    d_match = re.search(r"\.D\((\S+?)\)", line)
+                    q_match = re.search(r"\.Q\((\S+?)\)", line)
+                    if d_match and q_match:
+                        d_net = d_match.group(1).rstrip(",")  # remove trailing comma if present
+                        q_net = q_match.group(1).rstrip(",")
+                        ff_inputs[ff_name] = d_net
+                        ff_outputs[ff_name] = q_net
+                        net_drivers[q_net] = ff_name
 
         # Parse gates (any line ending with ");")
         if "(" in line and ");" in line:
             # crude net connection: net driving another net
-            ports = re.findall(r"\.(?:A|B|D|Y)\((\S+)\)", line)
+            ports = re.findall(r"\.(?:A|B|D|Y)\((\S+?)\)", line)
             if len(ports) >= 2:
                 # assume last port is output
-                out_net = ports[-1]
+                out_net = ports[-1].rstrip(",")
                 for in_net in ports[:-1]:
-                    net_fanout[in_net].append(out_net)
+                    net_fanout[in_net.rstrip(",")].append(out_net)
                     net_drivers[out_net] = line  # optional, store gate line
 
 # ---------- BUILD FF CONNECTION GRAPH ----------
