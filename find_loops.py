@@ -39,12 +39,14 @@ with open(netlist_file) as f:
 
         # Parse gates (any line ending with ");")
         if "(" in line and ");" in line:
-            # capture input and output nets
-            ports = re.findall(r"\.(?:A|B|D|Y)\((\S+?)\)", line)
+            # Capture any port name and its net
+            ports = re.findall(r"\.(\w+)\((\S+?)\)", line)
             if len(ports) >= 2:
-                out_net = ports[-1].rstrip(",")
-                for in_net in ports[:-1]:
+                # last port is output net
+                out_net = ports[-1][1].rstrip(",")
+                for port_name, in_net in ports[:-1]:
                     net_fanout[in_net.rstrip(",")].append(out_net)
+
 
 print "=== Net Fanout Graph ==="
 for net, fans in net_fanout.items():
@@ -122,4 +124,5 @@ with open(output_file, "w") as f:
         f.write(ff + "\n")
 
 print "Found %d loops, saved %d FFs to %s" % (len(cycles), len(selected_ff), output_file)
+
 
