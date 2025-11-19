@@ -20,19 +20,21 @@ with open(netlist_file) as f:
         # Parse FF
         for ff_type in ff_types:
             if line.startswith(ff_type):
-                # Match FF name
-                m_name = re.search(rf"{ff_type}\s+(\S+)\s*\(", line)
+                # Build regex pattern without f-string
+                pattern = ff_type + r"\s+(\S+)\s*\("
+                m_name = re.search(pattern, line)
                 if m_name:
                     ff_name = m_name.group(1)
                     # Match .D(...) and .Q(...) anywhere in the port list
                     d_match = re.search(r"\.D\((\S+?)\)", line)
                     q_match = re.search(r"\.Q\((\S+?)\)", line)
                     if d_match and q_match:
-                        d_net = d_match.group(1).rstrip(",")  # remove trailing comma if present
+                        d_net = d_match.group(1).rstrip(",")
                         q_net = q_match.group(1).rstrip(",")
                         ff_inputs[ff_name] = d_net
                         ff_outputs[ff_name] = q_net
                         net_drivers[q_net] = ff_name
+
 
         # Parse gates (any line ending with ");")
         if "(" in line and ");" in line:
@@ -92,3 +94,4 @@ with open(output_file, "w") as f:
         f.write(ff + "\n")
 
 print(f"Found {len(cycles)} loops, saved {len(selected_ff)} FFs to {output_file}")
+
