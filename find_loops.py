@@ -1,92 +1,58 @@
 import re
-from collections import defaultdict
+import sys
+from collections import defaultdict, deque
+
+# Increase recursion limit for deep DFS in 2.7 (default is often 1000)
+sys.setrecursionlimit(5000) 
 
 # ---------- CONFIG ----------
 netlist_file = "b01.v"
 output_file = "loop_regs.txt"
 
 # FF types in your netlist
-ff_types = ["DFFARX1_LVT", "SDFFARX1_LVT"]  # add other FF types if needed
+ff_types = ["DFFARX1_LVT", "SDFFARX1_LVT"] 
 
 # ---------- PARSE NETLIST ----------
-ff_inputs = {}     # FF name -> input net
-ff_outputs = {}    # FF name -> output net
-net_drivers = {}   # net -> driving FF or gate
-net_fanout = defaultdict(list)  # net -> list of nets it drives
+ff_inputs = {}     
+ff_outputs = {}    
+net_drivers = {}   
+net_fanout = defaultdict(list) 
 
-with open(netlist_file) as f:
+with open(netlist_file, 'r') as f:
     for line in f:
         line = line.strip()
-        if line.startswith("//") or line == "":
-            continue  # skip comments and empty lines
-
         # Parse FF
         for ff_type in ff_types:
             if line.startswith(ff_type):
-                # Match FF name
-                m_name = re.search(r"%s\s+(\S+)\s*\(" % ff_type, line)
-                if m_name:
-                    ff_name = m_name.group(1)
-                    # Match .D(...) and .Q(...) anywhere in the port list
-                    d_match = re.search(r"\.D\((\S+?)\)", line)
-                    q_match = re.search(r"\.Q\((\S+?)\)", line)
-                    if d_match and q_match:
-                        d_net = d_match.group(1).rstrip(",")
-                        q_net = q_match.group(1).rstrip(",")
-                        ff_inputs[ff_name] = d_net
-                        ff_outputs[ff_name] = q_net
-                        net_drivers[q_net] = ff_name
+                # FIX 1: Remove f-string (rf"...")
+                # Construct regex pattern using string formatting
+                pattern = r"{}\s+(\S+)\s*\(.*\.D\((\S+)\).*\.Q\((\S+)\)".format(ff_type)
+                
+                m = re.search(pattern, line)
+                if m:
+                    ff_name = m.group(1)
+                    d_net = m.group(2)
+                    q_net = m.group(3)
+                    ff_inputs[ff_name] = d_net
+                    ff_outputs[ff_name] = q_net
+                    net_drivers[q_net] = ff_name
 
-        # Parse gates (any line ending with ");")
+        # Parse gates
         if "(" in line and ");" in line:
-            # Capture any port name and its net
-            ports = re.findall(r"\.(\w+)\((\S+?)\)", line)
+            ports = re.findall(r"\.(?:A|B|D|Y)\((\S+)\)", line)
             if len(ports) >= 2:
-                # last port is output net
-                out_net = ports[-1][1].rstrip(",")
-                for port_name, in_net in ports[:-1]:
-                    net_fanout[in_net.rstrip(",")].append(out_net)
+                out_net = ports[-1]
+                for in_net in ports[:-1]:
+                    net_fanout[in_net].append(out_net)
+                    net_drivers[out_net] = line 
 
-
-print "=== Net Fanout Graph ==="
-for net, fans in net_fanout.items():
-    print net, "fans out to", fans
-print "======================="
-
-
-# ---------- BUILD FF GRAPH THROUGH COMBINATIONAL LOGIC ----------
-def get_ff_successors(ff_name, visited_nets=None):
-    """Return all FFs reachable from ff_name through combinational nets."""
-    if visited_nets is None:
-        visited_nets = set()
-    successors = []
-    q_net = ff_outputs[ff_name]
-    stack = [q_net]
-
-    while stack:
-        net = stack.pop()
-        if net in visited_nets:
-            continue
-        visited_nets.add(net)
-        for f in net_fanout.get(net, []):
-            # check if net drives FF D
-            for ff, d_net in ff_inputs.items():
-                if f == d_net:
-                    successors.append(ff)
-            # continue traversing nets
-            stack.append(f)
-    return successors
-
+# ---------- BUILD FF CONNECTION GRAPH ----------
 ff_graph = defaultdict(list)
-for ff in ff_outputs:
-    succs = get_ff_successors(ff)
-    ff_graph[ff].extend(succs)
-
-print "=== FF Graph ==="
-for ff, succs in ff_graph.items():
-    print ff, "->", succs
-print "================"
-
+for ff_name, d_net in ff_inputs.items(): # .items() creates a list in 2.7, which is fine
+    if d_net in net_drivers:
+        driver = net_drivers[d_net]
+        if driver in ff_outputs:
+            ff_graph[driver].append(ff_name)
 
 # ---------- CYCLE DETECTION ----------
 def find_cycles(graph):
@@ -96,8 +62,10 @@ def find_cycles(graph):
 
     def dfs(node, path):
         if node in stack:
-            idx = path.index(node)
-            cycles.append(path[idx:])
+            # found cycle
+            if node in path: # Safety check
+                idx = path.index(node)
+                cycles.append(path[idx:])
             return
         if node in visited:
             return
@@ -114,15 +82,15 @@ def find_cycles(graph):
 cycles = find_cycles(ff_graph)
 
 # ---------- PICK ONE FF PER LOOP ----------
-selected_ff = []
+# FIX 2: Use a Set to avoid duplicates if an FF is in multiple loops
+selected_ff = set()
 for loop in cycles:
-    selected_ff.append(loop[0])  # pick first FF as scan candidate
+    selected_ff.add(loop[0]) 
 
 # ---------- SAVE OUTPUT ----------
 with open(output_file, "w") as f:
     for ff in selected_ff:
         f.write(ff + "\n")
 
-print "Found %d loops, saved %d FFs to %s" % (len(cycles), len(selected_ff), output_file)
-
-
+# FIX 3: Python 2.7 style print or .format()
+print "Found {} loops, saved {} unique FFs to {}".format(len(cycles), len(selected_ff), output_file)
